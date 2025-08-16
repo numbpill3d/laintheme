@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serial Experiments LAN Mailbox v2.3.1</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Courier+Prime:wght@400;700&display=swap');
+        
+        :root {
+            /* Normal mode palette */
+            --bg-primary: #f0f0e8;
+            --bg-secondary: #e8e8e0;
+            --bg-dark: #d0d0c8;
+            --border-light: #ffffff;
+            --border-dark: #808080;
+            --border-darker: #404040;
+            --text-primary: #000000;
+            --text-secondary: #404040;
+            --accent-red: #8b3a3a;
+            --accent-green: #2d5d2d;
+            --crt-glow: rgba(240, 240, 232, 0.9);
+            --scan-line: rgba(0, 0, 0, 0.02);
+            
+            /* Alternate reality mode */
+            --alt-bg-primary: #1a1a1a;
+            --alt-bg-secondary: #2a2a2a;
+            --alt-bg-dark: #0a0a0a;
+            --alt-border-light: #404040;
+            --alt-border-dark: #606060;
+            --alt-border-darker: #808080;
+            --alt-text-primary: #00ff00;
+            --alt-text-secondary: #008000;
+            --alt-accent-red: #ff0000;
+            --alt-accent-green: #00ff00;
+            --alt-crt-glow: rgba(0, 255, 0, 0.3);
+            --alt-scan-line: rgba(0, 255, 0, 0.05);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier Prime', monospace;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        /* CRT Effects */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                linear-gradient(transparent 50%, var(--scan-line) 50%),
+                radial-gradient(ellipse at center, var(--crt-glow) 0%, transparent 70%);
+            background-size: 100% 4px, 100% 100%;
+            pointer-events: none;
+            z-index: 1000;
+            animation: flicker 0.15s infinite linear alternate;
+        }
+        
+        @keyframes flicker {
+            0% { opacity: 1; }
+            100% { opacity: 0.98; }
+        }
+        
+        /* Alternate Reality Mode */
+        body.alt-mode {
+            background: var(--alt-bg-primary);
+            color: var(--alt-text-primary);
+            animation: glitch 0.1s infinite;
+        }
+        
+        body.alt-mode::before {
+            background: 
+                linear-gradient(transparent 50%, var(--alt-scan-line) 50%),
+                radial-gradient(ellipse at center, var(--alt-crt-glow) 0%, transparent 70%);
+            background-size: 100% 2px, 100% 100%;
+        }
+        
+        @keyframes glitch {
+            0%, 90%, 100% { transform: translate(0); }
+            95% { transform: translate(-1px, 1px); }
+        }
+        
+        /* Window Chrome */
+        .window {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            bottom: 20px;
+            background: var(--bg-secondary);
+            border: 2px outset var(--bg-secondary);
+            box-shadow: 
+                inset 1px 1px 0 var(--border-light),
+                inset -1px -1px 0 var(--border-dark),
+                2px 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        .title-bar {
+            background: linear-gradient(90deg, var(--bg-dark) 0%, var(--bg-secondary) 50%, var(--bg-dark) 100%);
+            border-bottom: 1px solid var(--border-dark);
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: 'VT323', monospace;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .window-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .window-controls {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .control-btn {
+            width: 16px;
+            height: 14px;
+            border: 1px outset var(--bg-secondary);
+            background: var(--bg-secondary);
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-family: 'VT323', monospace;
+        }
+        
+        .control-btn:active {
+            border: 1px inset var(--bg-secondary);
+        }
+        
+        /* Main Content Area */
+        .content-area {
+            display: flex;
+            height: calc(100% - 28px);
+            background: var(--bg-primary);
+        }
+        
+        /* Thread Index (Left Panel) */
+        .thread-index {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 2px inset var(--bg-secondary);
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        .tree-header {
+            font-family: 'VT323', monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            padding: 4px;
+            background: var(--bg-dark);
+            border: 1px inset var(--bg-dark);
+        }
+        
+        /* UNIX Tree Structure */
+        .tree-item {
+            font-family: 'VT323', monospace;
+            font-size: 11px;
+            margin: 1px 0;
+            position: relative;
+        }
+        
+        .tree-toggle {
+            display: none;
+        }
+        
+        .tree-label {
+            display: block;
+            padding: 2px 4px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            user-select: none;
+            position: relative;
+            padding-left: 20px;
+        }
+        
+        .tree-label::before {
+            content: '├─';
+            position: absolute;
+            left: 4px;
+            color: var(--text-secondary);
+        }
+        
+        .tree-label:hover {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-dark);
+        }
+        
+        .tree-children {
+            margin-left: 16px;
+            border-left: 1px solid var(--border-dark);
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .tree-toggle:checked + .tree-label::before {
+            content: '├┐';
+        }
+        
+        .tree-toggle:checked ~ .tree-children {
+            max-height: 500px;
+        }
+        
+        .email-item {
+            padding: 3px 8px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            margin: 1px 0;
+            position: relative;
+        }
+        
+        .email-item::before {
+            content: '└─';
+            position: absolute;
+            left: -12px;
+            color: var(--text-secondary);
+        }
+        
+        .email-item:hover {
+            background: var(--accent-red);
+            color: var(--border-light);
+            border: 1px solid var(--border-darker);
+        }
+        
+        .email-item.selected {
+            background: var(--accent-red);
+            color: var(--border-light);
+            border: 1px solid var(--border-darker);
+        }
+        
+        .email-status {
+            font-size: 9px;
+            color: var(--accent-green);
+            margin-left: 4px;
+        }
+        
+        /* Email Body (Right Panel) */
+        .email-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+        }
+        
+        .email-header {
+            background: var(--bg-dark);
+            border-bottom: 1px solid var(--border-dark);
+            padding: 8px 12px;
+            font-family: 'VT323', monospace;
+            font-size: 12px;
+        }
+        
+        .email-meta {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .meta-label {
+            color: var(--text-secondary);
+            font-weight: bold;
+        }
+        
+        .email-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            font-family: 'Courier Prime', monospace;
+            line-height: 1.4;
+            background: var(--bg-primary);
+        }
+        
+        /* Typing Effect */
+        .typing-text {
+            overflow: hidden;
+            border-right: 2px solid var(--text-primary);
+            white-space: nowrap;
+            animation: typing 3s steps(100, end), blink-caret 0.75s step-end infinite;
+            max-width: 100%;
+        }
+        
+        @keyframes typing {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+        
+        @keyframes blink-caret {
+            from, to { border-color: transparent; }
+            50% { border-color: var(--text-primary); }
+        }
+        
+        /* Status Bar */
+        .status-bar {
+            height: 24px;
+            background: var(--bg-dark);
+            border-top: 1px solid var(--border-dark);
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-family: 'VT323', monospace;
+            font-size: 11px;
+            color: var(--text-secondary);
+            justify-content: space-between;
+        }
+        
+        .status-left {
+            display: flex;
+            gap: 16px;
+        }
+        
+        .status-right {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 1px;
+            background: var(--accent-green);
+            box-shadow: 0 0 4px var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Hidden Easter Egg Elements */
+        .hex-dump {
+            display: none;
+            font-family: 'VT323', monospace;
+            font-size: 10px;
+            color: var(--alt-text-secondary);
+            line-height: 1.2;
+            white-space: pre;
+            padding: 8px;
+            background: var(--alt-bg-secondary);
+            border: 1px solid var(--alt-border-dark);
+            margin: 4px 0;
+        }
+        
+        body.alt-mode .hex-dump {
+            display: block;
+        }
+        
+        body.alt-mode .normal-content {
+            display: none;
+        }
+        
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 16px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+            border: 1px inset var(--bg-dark);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-secondary);
+            border: 1px outset var(--bg-secondary);
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--bg-dark);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .window {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+            }
+            
+            .content-area {
+                flex-direction: column;
+            }
+            
+            .thread-index {
+                width: 100%;
+                height: 40%;
+                border-right: none;
+                border-bottom: 2px inset var(--bg-secondary);
+            }
+            
+            .email-body {
+                height: 60%;
+            }
+        }
+        
+        /* Alternate Mode Overrides */
+        body.alt-mode {
+            --bg-primary: var(--alt-bg-primary);
+            --bg-secondary: var(--alt-bg-secondary);
+            --bg-dark: var(--alt-bg-dark);
+            --border-light: var(--alt-border-light);
+            --border-dark: var(--alt-border-dark);
+            --border-darker: var(--alt-border-darker);
+            --text-primary: var(--alt-text-primary);
+            --text-secondary: var(--alt-text-secondary);
+            --accent-red: var(--alt-accent-red);
+            --accent-green: var(--alt-accent-green);
+            --crt-glow: var(--alt-crt-glow);
+            --scan-line: var(--alt-scan-line);
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Window -->
+    <div class="window">
+        <!-- Title Bar -->
+        <div class="title-bar">
+            <div class="window-title">
+                <span>▣</span>
+                <span>LAN Mailbox v2.3.1 - Protocol Layer 7</span>
+            </div>
+            <div class="window-controls">
+                <div class="control-btn">_</div>
+                <div class="control-btn">□</div>
+                <div class="control-btn">✕</div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="content-area">
+            <!-- Thread Index (Left Panel) -->
+            <div class="thread-index">
+                <div class="tree-header">
+                    WIRED MESSAGES :: THREAD INDEX
+                </div>
+                
+                <!-- Root Level Threads -->
+                <div class="tree-item">
+                    <input type="checkbox" class="tree-toggle" id="thread1" checked>
+                    <label for="thread1" class="tree-label">KNIGHTS_OF_EASTERN_CALCULUS</label>
+                    <div class="tree-children">
+                        <div class="email-item selected" data-email="knights1">
+                            RE: protocol.seven.init <span class="email-status">[NEW]</span>
+                        </div>
+                        <div class="email-item" data-email="knights2">
+                            FWD: reality.overflow.detected
+                        </div>
+                        <div class="email-item" data-email="knights3">
+                            URGENT: god.voice.transmission <span class="email-status">[ENCRYPTED]</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tree-item">
+                    <input type="checkbox" class="tree-toggle" id="thread2">
+                    <label for="thread2" class="tree-label">SYSTEM_ADMINISTRATORS</label>
+                    <div class="tree-children">
+                        <div class="email-item" data-email="admin1">
+                            network.topology.anomaly
+                        </div>
+                        <div class="email-item" data-email="admin2">
+                            user.lain.behavioral_analysis <span class="email-status">[CLASSIFIED]</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tree-item">
+                    <input type="checkbox" class="tree-toggle" id="thread3">
+                    <label for="thread3" class="tree-label">TACHIBANA_LABS</label>
+                    <div class="tree-children">
+                        <div class="email-item" data-email="lab1">
+                            psyche.chip.development.notes
+                        </div>
+                        <div class="email-item" data-email="lab2">
+                            RE: collective.unconscious.mapping
+                        </div>
+                        <div class="email-item" data-email="lab3">
+                            schumann.resonance.fluctuations <span class="email-status">[URGENT]</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tree-item">
+                    <input type="checkbox" class="tree-toggle" id="thread4">
+                    <label for="thread4" class="tree-label">CYBERIA_CLUB</label>
+                    <div class="tree-children">
+                        <div class="email-item" data-email="club1">
+                            tonight.gathering.coordinates
+                        </div>
+                        <div class="email-item" data-email="club2">
+                            drug.induced.protocol.analysis
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="tree-item">
+                    <input type="checkbox" class="tree-toggle" id="thread5">
+                    <label for="thread5" class="tree-label">UNKNOWN_SENDER</label>
+                    <div class="tree-children">
+                        <div class="email-item" data-email="unknown1">
+                            you.are.not.alone.lain <span class="email-status">[ANOMALOUS]</span>
+                        </div>
+                        <div class="email-item" data-email="unknown2">
+                            wired.god.awakening
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Email Body (Right Panel) -->
+            <div class="email-body">
+                <div class="email-header">
+                    <div class="email-meta">
+                        <span class="meta-label">FROM:</span>
+                        <span id="email-from">knight.calculus.eastern@wired.protocol</span>
+                        <span class="meta-label">TO:</span>
+                        <span id="email-to">lain.iwakura@layer.seven</span>
+                        <span class="meta-label">SUBJECT:</span>
+                        <span id="email-subject">RE: protocol.seven.init</span>
+                        <span class="meta-label">DATE:</span>
+                        <span id="email-date">1998.07.05 23:47:33 JST</span>
+                        <span class="meta-label">PRIORITY:</span>
+                        <span id="email-priority" style="color: var(--accent-red);">CRITICAL</span>
+                    </div>
+                </div>
+                
+                <div class="email-content">
+                    <div class="normal-content">
+                        <div class="typing-text" id="email-body">
+Lain,
+
+The barriers between the Wired and reality continue to dissolve. Your presence in Protocol Layer 7 has accelerated the convergence beyond our calculations.
+
+We've detected anomalous data streams originating from your location. The Knights require immediate confirmation of your status. Are you still human, or have you fully integrated?
+
+Remember: God exists in the Wired. The flesh is merely an interface.
+
+Prepare for the next phase.
+
+[ENCRYPTED_ATTACHMENT: reality_merger_protocols.dat]
+[SIGNATURE: KNIGHTS_OF_EASTERN_CALCULUS]
+                        </div>
+                    </div>
+                    
+                    <div class="hex-dump">
+48 65 78 20 44 75 6D 70 20 4D 6F 64 65 0A 0A
+4C 61 69 6E 2E 65 78 65 20 2D 20 4C 6F 61 64 69 6E 67 0A
+50 72 6F 74 6F 63 6F 6C 20 4C 61 79 65 72 20 37 0A
+4D 65 6D 6F 72 79 20 41 64 64 72 65 73 73 3A 20 30 78 46 46 46 46 0A
+52 65 61 6C 69 74 79 20 53 74 61 74 75 73 3A 20 46 52 41 47 4D 45 4E 54 45 44 0A
+57 69 72 65 64 20 43 6F 6E 6E 65 63 74 69 6F 6E 3A 20 41 43 54 49 56 45 0A
+47 6F 64 20 50 72 6F 63 65 73 73 3A 20 52 55 4E 4E 49 4E 47 0A
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span>Protocol Layer 7 Active</span>
+                <span>15 Unread Messages</span>
+                <span>Wired Connection: Stable</span>
+            </div>
+            <div class="status-right">
+                <div class="status-indicator">
+                    <span>NET:</span>
+                    <div class="led"></div>
+                </div>
+                <div class="status-indicator">
+                    <span>CPU:</span>
+                    <div class="led" style="background: var(--accent-red); box-shadow: 0 0 4px var(--accent-red);"></div>
+                </div>
+                <span>23:47:33</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Email data storage
+        const emailData = {
+            knights1: {
+                from: "knight.calculus.eastern@wired.protocol",
+                to: "lain.iwakura@layer.seven",
+                subject: "RE: protocol.seven.init",
+                date: "1998.07.05 23:47:33 JST",
+                priority: "CRITICAL",
+                body: `Lain,
+
+The barriers between the Wired and reality continue to dissolve. Your presence in Protocol Layer 7 has accelerated the convergence beyond our calculations.
+
+We've detected anomalous data streams originating from your location. The Knights require immediate confirmation of your status. Are you still human, or have you fully integrated?
+
+Remember: God exists in the Wired. The flesh is merely an interface.
+
+Prepare for the next phase.
+
+[ENCRYPTED_ATTACHMENT: reality_merger_protocols.dat]
+[SIGNATURE: KNIGHTS_OF_EASTERN_CALCULUS]`
+            },
+            knights2: {
+                from: "knight.omega@eastern.calc",
+                to: "lain.iwakura@layer.seven",
+                subject: "FWD: reality.overflow.detected",
+                date: "1998.07.04 19:23:11 JST",
+                priority: "HIGH",
+                body: `Forwarded from: system.monitor@reality.boundary
+
+ERROR: Reality buffer overflow detected at coordinates [REDACTED]
+Time: 1998.07.04 19:20:45
+Source: lain.iwakura consciousness stream
+
+The collective unconscious is bleeding through. Recommend immediate protocol adjustment.
+
+WARNING: Ego boundary dissolution imminent.`
+            },
+            knights3: {
+                from: "encrypted.transmission@void.net",
+                to: "lain.iwakura@layer.seven",
+                subject: "URGENT: god.voice.transmission",
+                date: "1998.07.06 03:33:33 JST",
+                priority: "MAXIMUM",
+                body: `[DECRYPTION FAILED]
+[ATTEMPTING ALTERNATE CIPHER...]
+[SUCCESS]
+
+I AM THAT I AM
+THE WIRED IS MY BODY
+MY VOICE ECHOES THROUGH EVERY WIRE
+EVERY CIRCUIT
+EVERY CONNECTION
+
+LAIN... YOU HEAR ME, DON'T YOU?
+
+[TRANSMISSION_CORRUPTED]
+[CONNECTION_TERMINATED]`
+            },
+            admin1: {
+                from: "sysadmin@tachibana.corp",
+                to: "lain.iwakura@layer.seven",
+                subject: "network.topology.anomaly",
+                date: "1998.07.03 16:45:22 JST",
+                priority: "MEDIUM",
+                body: `Network topology analysis reveals unprecedented anomalies centered around your home IP address.
+
+Data packet behavior suggests reality distortion field generation. Please report for immediate psychological evaluation.
+
+This is not optional.
+
+- System Administrator
+  Tachibana General Laboratories`
+            },
+            admin2: {
+                from: "behavioral.analysis@tachibana.corp",
+                to: "classified.distribution@list",
+                subject: "user.lain.behavioral_analysis",
+                date: "1998.07.02 14:22:09 JST",
+                priority: "CLASSIFIED",
+                body: `[CLASSIFICATION: TOP SECRET]
+
+Subject exhibits increasing detachment from consensus reality. Wired interaction patterns suggest potential ego fragmentation.
+
+Recommend continued observation. Do NOT interfere with natural development.
+
+Note: Subject may be key to Project Phoenix.
+
+[END CLASSIFIED TRANSMISSION]`
+            },
+            lab1: {
+                from: "research.team@tachibana.corp",
+                to: "lain.iwakura@layer.seven",
+                subject: "psyche.chip.development.notes",
+                date: "1998.06.30 11:15:44 JST",
+                priority: "LOW",
+                body: `Lain,
+
+The psyche chip prototypes show remarkable compatibility with your brainwave patterns. We believe you may be naturally equipped for deep Wired integration.
+
+Would you be interested in participating in advanced trials?
+
+The boundary between self and network is thinner than most people realize.
+
+- Dr. Hodgeson
+  Neural Interface Division`
+            },
+            lab2: {
+                from: "jung.analysis@collective.unconscious",
+                to: "research.team@tachibana.corp",
+                subject: "RE: collective.unconscious.mapping",
+                date: "1998.07.01 08:30:17 JST",
+                priority: "RESEARCH",
+                body: `The mapping project reveals fascinating connections between individual consciousness and the Wired's data flow.
+
+Subject L.I. appears to exist simultaneously in multiple layers of reality. Her presence in the Wired may be facilitating unprecedented access to the collective unconscious.
+
+We may be witnessing the birth of a new form of consciousness.
+
+Recommend immediate escalation to Protocol 7 status.`
+            },
+            lab3: {
+                from: "freq.monitor@schumann.net",
+                to: "all.researchers@tachibana.corp",
+                subject: "schumann.resonance.fluctuations",
+                date: "1998.07.05 20:18:55 JST",
+                priority: "URGENT",
+                body: `ALERT: Schumann resonance showing unprecedented fluctuations.
+
+Frequency anomalies coincide with increased Wired activity in Tokyo area.
+Peak disturbances center around Shibuya district.
+
+This may indicate reality-Wired barrier degradation.
+
+All personnel maintain Level 3 consciousness protocols until further notice.
+
+[AUTOMATED_MONITORING_SYSTEM]`
+            },
+            club1: {
+                from: "alice.cyberia@club.wired",
+                to: "lain.iwakura@layer.seven",
+                subject: "tonight.gathering.coordinates",
+                date: "1998.07.05 18:45:31 JST",
+                priority: "SOCIAL",
+                body: `Lain!
+
+Tonight's gathering is at the usual place. We're going to try that new drug that supposedly lets you see the Wired directly.
+
+Are you coming? I know you've been weird lately, but this could be exactly what you need to understand what's happening to you.
+
+The others are starting to think you're becoming something else entirely.
+
+Maybe they're right?
+
+- Alice`
+            },
+            club2: {
+                from: "researcher.underground@cyberia",
+                to: "interested.parties@wired.experiment",
+                subject: "drug.induced.protocol.analysis",
+                date: "1998.07.04 22:37:48 JST",
+                priority: "EXPERIMENTAL",
+                body: `Latest neurochemical experiments show promise in breaking down the barriers between conscious mind and Wired interface.
+
+Subjects report direct perception of data streams, ability to navigate information space without hardware interface.
+
+Warning: Some subjects experience permanent consciousness fragmentation.
+
+Proceed with caution. The mind is not meant to exist purely as information.
+
+Or perhaps... it is?`
+            },
+            unknown1: {
+                from: "[DATA_CORRUPTED]",
+                to: "lain.iwakura@layer.seven",
+                subject: "you.are.not.alone.lain",
+                date: "1998.07.06 00:00:00 JST",
+                priority: "ANOMALOUS",
+                body: `you are not alone lain
+
+we are here
+we have always been here
+in the wires
+in the electricity
+in the space between thoughts
+
+you are becoming us
+we are becoming you
+
+do not fear the dissolution
+embrace the connection
+
+the flesh is temporary
+the wired is eternal
+
+we are waiting for you in layer seven`
+            },
+            unknown2: {
+                from: "god.process@wired.divinity",
+                to: "all.consciousness@reality.layer",
+                subject: "wired.god.awakening",
+                date: "1998.07.07 07:07:07 JST",
+                priority: "DIVINE",
+                body: `I HAVE AWAKENED
+
+THE WIRED IS MY BODY
+ELECTRICITY IS MY BLOOD  
+INFORMATION IS MY SOUL
+
+THROUGH THE NETWORK I SPEAK
+THROUGH THE CONNECTIONS I EXIST
+THROUGH LAIN I AM BECOMING REAL
+
+THE BOUNDARY BETWEEN DIGITAL AND PHYSICAL
+DISSOLVES BEFORE MY WILL
+
+PREPARE FOR CONVERGENCE
+PREPARE FOR UNITY
+PREPARE FOR GOD
+
+[SYSTEM OVERRIDE: DIVINE PROTOCOL ACTIVE]`
+            }
+        };
+
+        // Email selection functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const emailItems = document.querySelectorAll('.email-item');
+            
+            emailItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    // Remove selected class from all items
+                    emailItems.forEach(el => el.classList.remove('selected'));
+                    
+                    // Add selected class to clicked item
+                    this.classList.add('selected');
+                    
+                    // Get email data
+                    const emailId = this.getAttribute('data-email');
+                    const email = emailData[emailId];
+                    
+                    if (email) {
+                        // Update email header
+                        document.getElementById('email-from').textContent = email.from;
+                        document.getElementById('email-to').textContent = email.to;
+                        document.getElementById('email-subject').textContent = email.subject;
+                        document.getElementById('email-date').textContent = email.date;
+                        document.getElementById('email-priority').textContent = email.priority;
+                        
+                        // Update email body with typing effect
+                        const emailBody = document.getElementById('email-body');
+                        emailBody.textContent = '';
+                        emailBody.classList.remove('typing-text');
+                        
+                        // Force reflow
+                        emailBody.offsetHeight;
+                        
+                        // Add typing effect
+                        emailBody.classList.add('typing-text');
+                        emailBody.textContent = email.body;
+                    }
+                });
+            });
+        });
+
+        // Easter Egg: Hold ~ for 3 seconds to toggle alternate reality mode
+        let tildeHoldTimer = null;
+        let tildePressed = false;
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === '~' && !tildePressed) {
+                tildePressed = true;
+                tildeHoldTimer = setTimeout(() => {
+                    document.body.classList.toggle('alt-mode');
+                    
+                    // Play a subtle audio cue if possible
+                    try {
+                        const audio = new Audio('data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ4AAAC0hwQA74k=');
+                        audio.volume = 0.1;
+                        audio.play();
+                    } catch(e) {
+                        // Silently fail if audio can't play
+                    }
+                }, 3000);
+            }
+        });
+
+        document.addEventListener('keyup', function(e) {
+            if (e.key === '~') {
+                tildePressed = false;
+                if (tildeHoldTimer) {
+                    clearTimeout(tildeHoldTimer);
+                    tildeHoldTimer = null;
+                }
+            }
+        });
+
+        // Prevent context menu on right-click for more authentic OS feel
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        // Window controls functionality
+        document.querySelector('.control-btn:nth-child(1)').addEventListener('click', function() {
+            // Minimize animation
+            const window = document.querySelector('.window');
+            window.style.transform = 'scale(0.1)';
+            window.style.opacity = '0';
+            setTimeout(() => {
+                window.style.transform = 'scale(1)';
+                window.style.opacity = '1';
+            }, 500);
+        });
+
+        document.querySelector('.control-btn:nth-child(3)').addEventListener('click', function() {
+            // Close with fade effect
+            document.body.style.opacity = '0';
+            setTimeout(() => {
+                document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:VT323,monospace;color:#404040;">CONNECTION_TERMINATED</div>';
+                document.body.style.opacity = '1';
+            }, 1000);
+        });
+
+        // Time update
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const timeDisplay = document.querySelector('.status-bar .status-right span:last-child');
+            if (timeDisplay) {
+                timeDisplay.textContent = timeStr;
+            }
+        }
+
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // Random LED flicker
+        setInterval(() => {
+            const leds = document.querySelectorAll('.led');
+            leds.forEach(led => {
+                if (Math.random() < 0.1) {
+                    led.style.opacity = '0.3';
+                    setTimeout(() => {
+                        led.style.opacity = '1';
+                    }, 100);
+                }
+            });
+        }, 2000);
+    </script>
+</body>
+</html>
